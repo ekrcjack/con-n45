@@ -103,7 +103,7 @@ function unlock(){ if(unlocked)return; unlocked=true;
 
 function startKeepAlive(){ stopKeepAlive();
   keepAlive=setInterval(()=>{ if(speechSynthesis.speaking&&!speechSynthesis.paused){
-    speechSynthesis.pause(); speechSynthesis.resume(); } },9000); }
+    speechSynthesis.pause(); speechSynthesis.resume(); } },5000); }
 function stopKeepAlive(){ if(keepAlive){clearInterval(keepAlive);keepAlive=null;} }
 function clearHL(){ document.querySelectorAll('.s.playing').forEach(e=>e.classList.remove('playing')); }
 function stopAll(){ current=null; speechSynthesis.cancel(); stopKeepAlive(); clearHL(); }
@@ -119,11 +119,11 @@ function speak(text, el, pitch, onend){
   speechSynthesis.speak(u);
 }
 function playOne(el){
-  unlock(); stopAll(); startKeepAlive();
+  stopAll(); unlock(); startKeepAlive();
   speak(el.dataset.t, el, parseFloat(el.dataset.p), ()=>stopKeepAlive());
 }
 function playAll(card){
-  unlock(); stopAll(); startKeepAlive();
+  stopAll(); unlock(); startKeepAlive();
   const els=[...card.querySelectorAll('.s')]; const token={}; current=token;
   (function next(i){
     if(current!==token||i>=els.length){ stopKeepAlive(); return; }
