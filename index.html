@@ -90,27 +90,36 @@ const DATA = [{"n":1,"level":"N5","ja":"はじめまして","jaPlain":"はじめ
 
 /* ---------- TTS ---------- */
 let jaVoice=null, current=null;
+/* 優先選本機語音：Chrome 的「Google 日本語」是網路語音，常在念一兩句後卡住、不發 onend */
 function pickVoice(){
   const vs=speechSynthesis.getVoices().filter(v=>(v.lang||'').toLowerCase().startsWith('ja'));
-  if(vs.length) jaVoice=vs.find(v=>/kyoko|o-ren|google/i.test(v.name))||vs[0];
+  if(!vs.length) return;
+  const local=vs.filter(v=>v.localService);
+  const pool=local.length?local:vs;
+  jaVoice=pool.find(v=>/kyoko|o-ren|haruka|ayumi|nanami/i.test(v.name))||pool[0];
 }
 pickVoice();
 if(typeof speechSynthesis!=='undefined') speechSynthesis.onvoiceschanged=pickVoice;
-
-let unlocked=false;
-function unlock(){ if(unlocked)return; unlocked=true;
-  const u=new SpeechSynthesisUtterance(''); u.volume=0; try{speechSynthesis.speak(u);}catch(e){} }
 
 /* 句子都很短，不需要 Chrome 的 pause/resume keepAlive；
    而且 pause/resume 在 Safari／Android 上會讓 onend 不觸發，造成連續朗讀中斷 */
 let utters=[], watchdog=null;   // 保留 utterance 參照，避免被 GC 後 onend 不觸發
 function clearWatchdog(){ if(watchdog){clearTimeout(watchdog);watchdog=null;} }
 function clearHL(){ document.querySelectorAll('.s.playing').forEach(e=>e.classList.remove('playing')); }
-function stopAll(){ current=null; clearWatchdog(); utters=[]; speechSynthesis.cancel(); clearHL(); }
+let playVoice=null;   // 一次播放固定用同一個聲音，避免中途 voiceschanged 換聲音而卡住
+function stopAll(){ current=null; clearWatchdog(); utters=[];
+  if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
+  clearHL(); }
+/* 先停掉舊的播放再開始；第一次按時沒有東西在播，直接在點擊事件內同步 speak（iOS 需要） */
+function begin(fn){
+  const busy=speechSynthesis.speaking||speechSynthesis.pending;
+  stopAll(); pickVoice(); playVoice=jaVoice;
+  if(busy) setTimeout(fn,150); else fn();   // Chrome：cancel() 後立刻 speak() 可能被吃掉
+}
 
 function speak(text, el, pitch, onend){
   const u=new SpeechSynthesisUtterance(text);
-  u.lang='ja-JP'; if(jaVoice) u.voice=jaVoice;
+  u.lang='ja-JP'; if(playVoice) u.voice=playVoice;
   const rate=parseFloat(document.getElementById('rate').value);
   u.rate=rate; u.pitch=pitch;
   let done=false;
@@ -128,16 +137,17 @@ function speak(text, el, pitch, onend){
   if(speechSynthesis.paused) speechSynthesis.resume();
 }
 function playOne(el){
-  stopAll(); unlock();
-  speak(el.dataset.t, el, parseFloat(el.dataset.p));
+  begin(()=>speak(el.dataset.t, el, parseFloat(el.dataset.p)));
 }
 function playAll(card){
-  stopAll(); unlock();
-  const els=[...card.querySelectorAll('.s')]; const token={}; current=token;
-  (function next(i){
-    if(current!==token||i>=els.length) return;
-    speak(els[i].dataset.t, els[i], parseFloat(els[i].dataset.p), ()=>next(i+1));
-  })(0);
+  const els=[...card.querySelectorAll('.s')];
+  begin(()=>{
+    const token={}; current=token;
+    (function next(i){
+      if(current!==token||i>=els.length) return;
+      speak(els[i].dataset.t, els[i], parseFloat(els[i].dataset.p), ()=>next(i+1));
+    })(0);
+  });
 }
 
 /* ---------- render ---------- */
